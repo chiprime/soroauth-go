@@ -9,6 +9,56 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+**Offline verification**
+
+- `VerifyEntry` rebuilds the signing payload from an entry exactly as it
+  stands — including the `SignatureExpirationLedger` stored on it — and decides
+  every classic-account signature against it, so an entry can be checked
+  without submitting it and without paying a fee to find out. It reports a
+  verdict per credential node (`verified`, `unsigned`, `invalid`,
+  `cannot_check`) across all three address arms and nested delegate trees. A
+  custom account's signature is reported as `cannot_check` and never as
+  `verified`: only the contract's `__check_auth` defines its validity. Whether a
+  key is a signer of the account, and whether enough signers signed, are
+  account-state questions the engine cannot see and does not claim to answer.
+  (#59)
+- The `soroauth verify` subcommand exposes that engine from the shell, with
+  `--json`, `--allow-unsigned` for the Void top-level node a delegates-only
+  account legitimately has, and a non-zero exit unless every node verified. It
+  accepts a whole envelope as well as a single entry. (#60)
+- `remote`, a new package, defines an HTTP signing protocol that transmits the
+  **preimage** alongside the payload so a remote signer can inspect what it is
+  approving rather than blind-signing a digest. It ships a reference `Server`
+  that recomputes SHA-256 of the preimage and refuses a mismatched payload, an
+  optional `Approver` callback that observes each approval, and a client
+  `Signer` that satisfies `soroauth.Signer` and attaches its context to the
+  request so cancellation aborts an in-flight call. It has no authentication
+  and holds no key store, and is documented as a reference, not a service. The
+  root module does not depend on it. (#34)
+
+**Shell completions (`soroauth completions`)**
+
+- New subcommand: `soroauth completions --shell bash|zsh|fish` prints a
+  completion script for that shell on stdout (`--json` wraps it with the
+  shell name). The scripts complete the subcommands, each subcommand's flags,
+  and the enumerable flag values (`--shell`, `--format`, and the `--network`
+  shorthands `testnet`/`public`); fish additionally carries each flag's
+  description into the tab menu. `--secret-env` is completed by name only:
+  the shells never see or complete a variable's value. (#114)
+- The scripts are generated from a spec table that is checked, in both
+  directions, against the flags each subcommand really registers:
+  `TestSpecsMatchTheRealFlagSets` drives every `flag`-based subcommand's real
+  flag parsing and fails when the table and the `FlagSet` disagree, so a flag
+  added without updating the completions cannot ship silently missing from
+  them. (`tui`, which parses its arguments by hand, is checked against its
+  own usage text instead.)
+- The generated scripts are verified functionally in the test suite: the bash
+  script is sourced by real bash and its completion function queried, the
+  fish script is sourced by real fish and its `complete` rules queried, and
+  the zsh script is `zsh -n`-checked and registered under a real `compinit`.
+  All three are deterministic — the same shell always produces byte-identical
+  output.
+
 **Delegate plans and stricter batch signing for `AuthorizeAll`**
 
 - `AuthorizeAll` now takes optional `AuthorizeAllOption`s. `WithDelegatePlans`
