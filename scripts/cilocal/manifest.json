@@ -14,6 +14,7 @@
     "ci-node.yml",
     "ci-grpc.yml",
     "ci-openapi.yml",
+    "ci-browser-offline.yml",
     "ci-freighter.yml",
     "ci-action.yml",
     "ci-image.yml",
@@ -110,6 +111,8 @@
     "ci-rust.yml/rust": { "requires": ["cargo"] },
     "ci-jvm.yml/jvm": { "requires": ["go", "mvn", "java", "gcc"], "os": ["linux", "darwin"] },
     "ci-node.yml/node": { "requires": ["node", "npm"] },
+
+    "ci-browser-offline.yml/offline": { "skip": "needs a Chromium install with root-level system libraries and a CDP virtual authenticator, which this runner does not provision" },
 
     "ci-grpc.yml/grpc": {
       "requires": ["go", "buf"],
