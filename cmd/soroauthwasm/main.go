@@ -36,6 +36,8 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -56,6 +58,7 @@ func main() {
 		js.FuncOf(payload),
 		js.FuncOf(writeSignature),
 		js.FuncOf(authorizeWithSeed),
+		js.FuncOf(passkeySignature),
 	}
 	bindings = functions
 
@@ -64,6 +67,7 @@ func main() {
 		"payload":           functions[1],
 		"writeSignature":    functions[2],
 		"authorizeWithSeed": functions[3],
+		"passkeySignature":  functions[4],
 	}))
 
 	// Keep the program alive so the callbacks remain callable from JS.
@@ -256,6 +260,49 @@ func authorizeWithSeed(this js.Value, args []js.Value) any {
 		return fail(err)
 	}
 	return ok(map[string]any{"entryB64": encoded})
+}
+
+// passkeySignature(publicKeyHex, signatureHex) ->
+//
+//	{ok, signatureScvalB64} | {ok:false, error}
+//
+// Builds the {public_key, signature} ScVal a passkey wallet contract decodes,
+// from an uncompressed SEC1 P-256 public key (65 bytes, 0x04 || X || Y) and a
+// raw low-S r||s signature (64 bytes). The shape is the same one
+// soroauth.Secp256r1SignatureScVal emits; this binding exists so an offline page
+// can produce it without linking the Stellar SDK or reimplementing XDR.
+func passkeySignature(this js.Value, args []js.Value) any {
+	if len(args) != 2 {
+		return fail(fmt.Errorf("soroauth: wasm: passkeySignature expects 2 arguments"))
+	}
+	publicBytes, err := hex.DecodeString(strings.TrimSpace(args[0].String()))
+	if err != nil {
+		return fail(fmt.Errorf("soroauth: wasm: decoding public key: %w", err))
+	}
+	signatureBytes, err := hex.DecodeString(strings.TrimSpace(args[1].String()))
+	if err != nil {
+		return fail(fmt.Errorf("soroauth: wasm: decoding signature: %w", err))
+	}
+	if len(publicBytes) != 65 || publicBytes[0] != 0x04 {
+		return fail(fmt.Errorf("soroauth: wasm: public key must be 65-byte uncompressed SEC1, got %d bytes", len(publicBytes)))
+	}
+	x, y := elliptic.Unmarshal(elliptic.P256(), publicBytes)
+	if x == nil || y == nil {
+		return fail(fmt.Errorf("soroauth: wasm: public key is not a valid P-256 point"))
+	}
+	value, err := soroauth.Secp256r1SignatureScVal(&ecdsa.PublicKey{
+		Curve: elliptic.P256(),
+		X:     x,
+		Y:     y,
+	}, signatureBytes)
+	if err != nil {
+		return fail(err)
+	}
+	raw, err := value.MarshalBinary()
+	if err != nil {
+		return fail(fmt.Errorf("soroauth: wasm: marshalling signature scval: %w", err))
+	}
+	return ok(map[string]any{"signatureScvalB64": base64.StdEncoding.EncodeToString(raw)})
 }
 
 // topLevelAddress returns the credential address of an address-based entry.
